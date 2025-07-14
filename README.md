@@ -1,4 +1,4 @@
-# word-play-languages
+# Word Play (by Game Maker's Toolkit - Language Mods
 Language mods for the Word Play game by Game Maker's Toolkit
 
 ## How to use
