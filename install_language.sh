@@ -23,14 +23,25 @@ get_available_languages() {
     # Add English as the first option
     languages+=("English (remove custom files)")
     
+    # Check directories
     for dir in */; do
         if [ -d "$dir" ]; then
             lang_name="${dir%/}"
-            if [ -f "$dir/customdictionary.txt" ] && [ -f "$dir/customletterbag.txt" ]; then
+            # Check for either customdictionary.txt or customdictionary.zip
+            if [ -f "$dir/customletterbag.txt" ] && ([ -f "$dir/customdictionary.txt" ] || [ -f "$dir/customdictionary.zip" ]); then
                 languages+=("$lang_name")
             fi
         fi
     done
+    
+    # Check zip files
+    for zipfile in *.zip; do
+        if [ -f "$zipfile" ]; then
+            lang_name="${zipfile%.zip}"
+            languages+=("$lang_name (zip)")
+        fi
+    done
+    
     echo "${languages[@]}"
 }
 
@@ -48,21 +59,33 @@ show_interactive_selection() {
     languages+=("English (remove custom files)")
     ((count++))
     
+    # Check directories
     for dir in */; do
         if [ -d "$dir" ]; then
             lang_name="${dir%/}"
-            if [ -f "$dir/customdictionary.txt" ] && [ -f "$dir/customletterbag.txt" ]; then
+            # Check for either customdictionary.txt or customdictionary.zip
+            if [ -f "$dir/customletterbag.txt" ] && ([ -f "$dir/customdictionary.txt" ] || [ -f "$dir/customdictionary.zip" ]); then
                 languages+=("$lang_name")
                 ((count++))
             fi
         fi
     done
     
+    # Check zip files
+    for zipfile in *.zip; do
+        if [ -f "$zipfile" ]; then
+            lang_name="${zipfile%.zip}"
+            languages+=("$lang_name (zip)")
+            ((count++))
+        fi
+    done
+    
     if [ $count -eq 1 ]; then
         echo -e "${YELLOW}No additional language mods found.${NC}" >&2
         echo "Each language directory should contain:" >&2
-        echo "  - customdictionary.txt" >&2
+        echo "  - customdictionary.txt OR customdictionary.zip" >&2
         echo "  - customletterbag.txt" >&2
+        echo "Or provide a .zip file containing customdictionary.txt" >&2
     fi
     
     # Display numbered options
@@ -70,6 +93,8 @@ show_interactive_selection() {
         local num=$((i + 1))
         if [ $i -eq 0 ]; then
             echo -e "  ${GREEN}$num${NC}. ${CYAN}${languages[$i]}${NC}" >&2
+        elif [[ "${languages[$i]}" == *"(zip)" ]]; then
+            echo -e "  ${GREEN}$num${NC}. ${YELLOW}${languages[$i]}${NC}" >&2
         else
             echo -e "  ${GREEN}$num${NC}. ${languages[$i]}" >&2
         fi
@@ -103,13 +128,18 @@ list_available_languages() {
     local found_languages=false
     
     # Always show English option
-    echo -e "  ${CYAN}✓${NC} English (remove custom files)"
+    echo -e "  ${CYAN}✓${NC} English (default)"
     
+    # Check directories
     for dir in */; do
         if [ -d "$dir" ]; then
             lang_name="${dir%/}"
-            if [ -f "$dir/customdictionary.txt" ] && [ -f "$dir/customletterbag.txt" ]; then
-                echo -e "  ${GREEN}✓${NC} $lang_name"
+            if [ -f "$dir/customletterbag.txt" ] && ([ -f "$dir/customdictionary.txt" ] || [ -f "$dir/customdictionary.zip" ]); then
+                if [ -f "$dir/customdictionary.zip" ]; then
+                    echo -e "  ${GREEN}✓${NC} $lang_name"
+                else
+                    echo -e "  ${GREEN}✓${NC} $lang_name"
+                fi
                 found_languages=true
             else
                 echo -e "  ${YELLOW}⚠${NC} $lang_name (missing files)"
@@ -117,10 +147,19 @@ list_available_languages() {
         fi
     done
     
+    # Check zip files
+    for zipfile in *.zip; do
+        if [ -f "$zipfile" ]; then
+            lang_name="${zipfile%.zip}"
+            echo -e "  ${YELLOW}📦${NC} $lang_name (custom dictionary only)"
+            found_languages=true
+        fi
+    done
+    
     if [ "$found_languages" = false ]; then
         echo -e "${YELLOW}No additional language mods found.${NC}"
         echo "Each language directory should contain:"
-        echo "  - customdictionary.txt"
+        echo "  - customdictionary.txt OR customdictionary.zip"
         echo "  - customletterbag.txt"
     fi
 }
@@ -183,6 +222,161 @@ remove_custom_files() {
     fi
 }
 
+# Function to install from zip file
+install_from_zip() {
+    local zip_file="$1"
+    local save_game_path=$(get_save_game_path)
+    local temp_dir=$(mktemp -d)
+    
+    echo -e "${BLUE}Installing from zip file: $zip_file${NC}"
+    echo "Source: $(pwd)/$zip_file"
+    echo "Destination: $save_game_path"
+    echo ""
+    
+    # Check if unzip is available
+    if ! command -v unzip &> /dev/null; then
+        echo -e "${RED}Error: 'unzip' command not found.${NC}"
+        echo "Please install unzip to extract language files from zip archives."
+        echo "On macOS: brew install unzip"
+        echo "On Ubuntu/Debian: sudo apt-get install unzip"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Extract zip file
+    echo -e "${BLUE}Extracting zip file...${NC}"
+    if ! unzip -q "$zip_file" -d "$temp_dir"; then
+        echo -e "${RED}Error: Failed to extract zip file.${NC}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Look for the customdictionary.txt file in the extracted content
+    local dict_file=""
+    
+    # Search for the file recursively
+    dict_file=$(find "$temp_dir" -name "customdictionary.txt" -type f | head -1)
+    
+    if [ -z "$dict_file" ]; then
+        echo -e "${RED}Error: customdictionary.txt not found in zip archive.${NC}"
+        echo "The zip file should contain customdictionary.txt"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Found customdictionary.txt"
+    echo ""
+    
+    # Copy only the dictionary file
+    local success_count=0
+    
+    if cp "$dict_file" "$save_game_path/"; then
+        echo -e "${GREEN}✓${NC} Copied customdictionary.txt"
+        ((success_count++))
+    else
+        echo -e "${RED}✗${NC} Failed to copy customdictionary.txt"
+    fi
+    
+    # Check if customletterbag.txt already exists in save directory
+    if [ -f "$save_game_path/customletterbag.txt" ]; then
+        echo -e "${YELLOW}⚠${NC} customletterbag.txt already exists in game directory (keeping existing)"
+    else
+        echo -e "${YELLOW}⚠${NC} No customletterbag.txt found - using default letter bag"
+    fi
+    
+    # Clean up
+    rm -rf "$temp_dir"
+    
+    echo ""
+    if [ $success_count -gt 0 ]; then
+        echo -e "${GREEN}Successfully installed custom dictionary from zip file!${NC}"
+        echo "The game should show 'Custom Dictionary' in the bottom left corner when starting a new game."
+        return 0
+    else
+        echo -e "${RED}No files were copied. Installation failed.${NC}"
+        return 1
+    fi
+}
+
+# Function to install from compressed dictionary
+install_from_compressed_dict() {
+    local language_dir="$1"
+    local save_game_path=$(get_save_game_path)
+    local temp_dir=$(mktemp -d)
+    
+    echo -e "${BLUE}Installing $language_dir language mod (with compressed dictionary)...${NC}"
+    echo "Source: $(pwd)/$language_dir"
+    echo "Destination: $save_game_path"
+    echo ""
+    
+    # Check if unzip is available
+    if ! command -v unzip &> /dev/null; then
+        echo -e "${RED}Error: 'unzip' command not found.${NC}"
+        echo "Please install unzip to extract language files from zip archives."
+        echo "On macOS: brew install unzip"
+        echo "On Ubuntu/Debian: sudo apt-get install unzip"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Extract the compressed dictionary
+    echo -e "${BLUE}Extracting compressed dictionary...${NC}"
+    if ! unzip -q "$language_dir/customdictionary.zip" -d "$temp_dir"; then
+        echo -e "${RED}Error: Failed to extract compressed dictionary.${NC}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Look for the customdictionary.txt file in the extracted content
+    local dict_file=""
+    dict_file=$(find "$temp_dir" -name "customdictionary.txt" -type f | head -1)
+    
+    if [ -z "$dict_file" ]; then
+        echo -e "${RED}Error: customdictionary.txt not found in compressed dictionary.${NC}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Found customdictionary.txt"
+    echo ""
+    
+    # Copy files
+    local success_count=0
+    
+    # Copy the extracted dictionary
+    if cp "$dict_file" "$save_game_path/"; then
+        echo -e "${GREEN}✓${NC} Copied customdictionary.txt"
+        ((success_count++))
+    else
+        echo -e "${RED}✗${NC} Failed to copy customdictionary.txt"
+    fi
+    
+    # Copy the letter bag file
+    if [ -f "$language_dir/customletterbag.txt" ]; then
+        if cp "$language_dir/customletterbag.txt" "$save_game_path/"; then
+            echo -e "${GREEN}✓${NC} Copied customletterbag.txt"
+            ((success_count++))
+        else
+            echo -e "${RED}✗${NC} Failed to copy customletterbag.txt"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} customletterbag.txt not found in $language_dir directory"
+    fi
+    
+    # Clean up
+    rm -rf "$temp_dir"
+    
+    echo ""
+    if [ $success_count -gt 0 ]; then
+        echo -e "${GREEN}Successfully installed $language_dir language mod!${NC}"
+        echo "The game should show 'Custom Dictionary' and 'Custom Letter Bag' in the bottom left corner when starting a new game."
+        return 0
+    else
+        echo -e "${RED}No files were copied. Installation failed.${NC}"
+        return 1
+    fi
+}
+
 # Function to show help
 show_help() {
     echo -e "${BLUE}Word Play Language Mod Installer${NC}"
@@ -213,6 +407,20 @@ install_language_mod() {
         return $?
     fi
     
+    # Check if this is a zip file option
+    if [[ "$language_name" == *"(zip)" ]]; then
+        local zip_name="${language_name% (zip)}"
+        local zip_file="${zip_name}.zip"
+        
+        if [ ! -f "$zip_file" ]; then
+            echo -e "${RED}Error: Zip file '$zip_file' not found!${NC}"
+            return 1
+        fi
+        
+        install_from_zip "$zip_file"
+        return $?
+    fi
+    
     # Check if language directory exists
     if [ ! -d "$language_name" ]; then
         echo -e "${RED}Error: Language directory '$language_name' not found!${NC}"
@@ -230,6 +438,12 @@ install_language_mod() {
         echo "2. Run Word Play at least once to create the save directory"
         echo "3. Check that the game has proper permissions"
         return 1
+    fi
+    
+    # Check if this language uses a compressed dictionary
+    if [ -f "$language_name/customdictionary.zip" ]; then
+        install_from_compressed_dict "$language_name"
+        return $?
     fi
     
     echo -e "${BLUE}Installing $language_name language mod...${NC}"

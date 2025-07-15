@@ -61,14 +61,23 @@ function Get-AvailableLanguagesList {
     # Add English as the first option
     $languages += "English (remove custom files)"
     
+    # Check directories
     Get-ChildItem -Directory | ForEach-Object {
         $langName = $_.Name
         $dictFile = Join-Path $_.FullName "customdictionary.txt"
+        $dictZipFile = Join-Path $_.FullName "customdictionary.zip"
         $bagFile = Join-Path $_.FullName "customletterbag.txt"
         
-        if ((Test-Path $dictFile) -and (Test-Path $bagFile)) {
+        # Check for either customdictionary.txt or customdictionary.zip
+        if ((Test-Path $bagFile) -and ((Test-Path $dictFile) -or (Test-Path $dictZipFile))) {
             $languages += $langName
         }
+    }
+    
+    # Check zip files
+    Get-ChildItem -Filter "*.zip" | ForEach-Object {
+        $langName = $_.BaseName
+        $languages += "$langName (zip)"
     }
     
     return $languages
@@ -85,8 +94,9 @@ function Show-InteractiveSelection {
     if ($count -eq 1) {
         Write-ColorOutput "No additional language mods found." $Yellow
         Write-Host "Each language directory should contain:"
-        Write-Host "  - customdictionary.txt"
+        Write-Host "  - customdictionary.txt OR customdictionary.zip"
         Write-Host "  - customletterbag.txt"
+        Write-Host "Or provide a .zip file containing customdictionary.txt"
     }
     
     # Display numbered options
@@ -94,6 +104,8 @@ function Show-InteractiveSelection {
         $num = $i + 1
         if ($i -eq 0) {
             Write-ColorOutput "  $num. $($languages[$i])" $Cyan
+        } elseif ($languages[$i] -like "*(zip)") {
+            Write-ColorOutput "  $num. $($languages[$i])" $Yellow
         } else {
             Write-ColorOutput "  $num. $($languages[$i])" $Green
         }
@@ -125,26 +137,41 @@ function Get-AvailableLanguages {
     $foundLanguages = $false
     
     # Always show English option
-    Write-ColorOutput "  ✓ English (remove custom files)" $Cyan
+    Write-ColorOutput "  ✓ English (default)" $Cyan
     
+    # Check directories
     Get-ChildItem -Directory | ForEach-Object {
         $langName = $_.Name
         $dictFile = Join-Path $_.FullName "customdictionary.txt"
+        $dictZipFile = Join-Path $_.FullName "customdictionary.zip"
         $bagFile = Join-Path $_.FullName "customletterbag.txt"
         
-        if ((Test-Path $dictFile) -and (Test-Path $bagFile)) {
-            Write-ColorOutput "  ✓ $langName" $Green
+        # Check for either customdictionary.txt or customdictionary.zip
+        if ((Test-Path $bagFile) -and ((Test-Path $dictFile) -or (Test-Path $dictZipFile))) {
+            if (Test-Path $dictZipFile) {
+                Write-ColorOutput "  ✓ $langName" $Green
+            } else {
+                Write-ColorOutput "  ✓ $langName" $Green
+            }
             $foundLanguages = $true
         } else {
             Write-ColorOutput "  ⚠ $langName (missing files)" $Yellow
         }
     }
     
+    # Check zip files
+    Get-ChildItem -Filter "*.zip" | ForEach-Object {
+        $langName = $_.BaseName
+        Write-ColorOutput "  📦 $langName (custom dictionary only)" $Yellow
+        $foundLanguages = $true
+    }
+    
     if (-not $foundLanguages) {
         Write-ColorOutput "No additional language mods found." $Yellow
         Write-Host "Each language directory should contain:"
-        Write-Host "  - customdictionary.txt"
+        Write-Host "  - customdictionary.txt OR customdictionary.zip"
         Write-Host "  - customletterbag.txt"
+        Write-Host "Or provide a .zip file containing customdictionary.txt"
     }
 }
 
@@ -198,12 +225,177 @@ function Remove-CustomFiles {
     }
 }
 
+function Install-FromZip {
+    param([string]$ZipFile)
+    
+    $saveGamePath = Get-SaveGamePath
+    
+    # Cross-platform temp directory
+    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        $tempDir = Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
+    } else {
+        $tempDir = Join-Path $env:TMPDIR ([System.Guid]::NewGuid().ToString())
+    }
+    
+    Write-ColorOutput "Installing from zip file: $ZipFile" $Blue
+    Write-Host "Source: $(Join-Path (Get-Location) $ZipFile)"
+    Write-Host "Destination: $saveGamePath"
+    Write-Host ""
+    
+    # Create temp directory
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    
+    try {
+        # Extract zip file
+        Write-ColorOutput "Extracting zip file..." $Blue
+        Expand-Archive -Path $ZipFile -DestinationPath $tempDir -Force
+        
+        # Look for customdictionary.txt in the extracted content
+        $dictFile = Get-ChildItem -Path $tempDir -Recurse -Filter "customdictionary.txt" | Select-Object -First 1
+        
+        if (-not $dictFile) {
+            Write-ColorOutput "Error: customdictionary.txt not found in zip archive." $Red
+            Write-Host "The zip file should contain customdictionary.txt"
+            return $false
+        }
+        
+        Write-ColorOutput "✓ Found customdictionary.txt" $Green
+        Write-Host ""
+        
+        # Copy only the dictionary file
+        $successCount = 0
+        
+        try {
+            Copy-Item $dictFile.FullName (Join-Path $saveGamePath "customdictionary.txt") -Force
+            Write-ColorOutput "✓ Copied customdictionary.txt" $Green
+            $successCount++
+        } catch {
+            Write-ColorOutput "✗ Failed to copy customdictionary.txt" $Red
+        }
+        
+        # Check if customletterbag.txt already exists in save directory
+        if (Test-Path (Join-Path $saveGamePath "customletterbag.txt")) {
+            Write-ColorOutput "⚠ customletterbag.txt already exists in game directory (keeping existing)" $Yellow
+        } else {
+            Write-ColorOutput "⚠ No customletterbag.txt found - using default letter bag" $Yellow
+        }
+        
+        Write-Host ""
+        if ($successCount -gt 0) {
+            Write-ColorOutput "Successfully installed custom dictionary from zip file!" $Green
+            Write-Host "The game should show 'Custom Dictionary' in the bottom left corner when starting a new game."
+            return $true
+        } else {
+            Write-ColorOutput "No files were copied. Installation failed." $Red
+            return $false
+        }
+    } finally {
+        # Clean up
+        if (Test-Path $tempDir) {
+            Remove-Item $tempDir -Recurse -Force
+        }
+    }
+}
+
+function Install-FromCompressedDict {
+    param([string]$LanguageDir)
+    
+    $saveGamePath = Get-SaveGamePath
+    
+    # Cross-platform temp directory
+    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        $tempDir = Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
+    } else {
+        $tempDir = Join-Path $env:TMPDIR ([System.Guid]::NewGuid().ToString())
+    }
+    
+    Write-ColorOutput "Installing $LanguageDir language mod (with compressed dictionary)..." $Blue
+    Write-Host "Source: $(Join-Path (Get-Location) $LanguageDir)"
+    Write-Host "Destination: $saveGamePath"
+    Write-Host ""
+    
+    # Create temp directory
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    
+    try {
+        # Extract the compressed dictionary
+        Write-ColorOutput "Extracting compressed dictionary..." $Blue
+        $dictZipFile = Join-Path $LanguageDir "customdictionary.zip"
+        Expand-Archive -Path $dictZipFile -DestinationPath $tempDir -Force
+        
+        # Look for customdictionary.txt in the extracted content
+        $dictFile = Get-ChildItem -Path $tempDir -Recurse -Filter "customdictionary.txt" | Select-Object -First 1
+        
+        if (-not $dictFile) {
+            Write-ColorOutput "Error: customdictionary.txt not found in compressed dictionary." $Red
+            return $false
+        }
+        
+        Write-ColorOutput "✓ Found customdictionary.txt" $Green
+        Write-Host ""
+        
+        # Copy files
+        $successCount = 0
+        
+        # Copy the extracted dictionary
+        try {
+            Copy-Item $dictFile.FullName (Join-Path $saveGamePath "customdictionary.txt") -Force
+            Write-ColorOutput "✓ Copied customdictionary.txt" $Green
+            $successCount++
+        } catch {
+            Write-ColorOutput "✗ Failed to copy customdictionary.txt" $Red
+        }
+        
+        # Copy the letter bag file
+        $bagFile = Join-Path $LanguageDir "customletterbag.txt"
+        if (Test-Path $bagFile) {
+            try {
+                Copy-Item $bagFile (Join-Path $saveGamePath "customletterbag.txt") -Force
+                Write-ColorOutput "✓ Copied customletterbag.txt" $Green
+                $successCount++
+            } catch {
+                Write-ColorOutput "✗ Failed to copy customletterbag.txt" $Red
+            }
+        } else {
+            Write-ColorOutput "⚠ customletterbag.txt not found in $LanguageDir directory" $Yellow
+        }
+        
+        Write-Host ""
+        if ($successCount -gt 0) {
+            Write-ColorOutput "Successfully installed $LanguageDir language mod!" $Green
+            Write-Host "The game should show 'Custom Dictionary' and 'Custom Letter Bag' in the bottom left corner when starting a new game."
+            return $true
+        } else {
+            Write-ColorOutput "No files were copied. Installation failed." $Red
+            return $false
+        }
+    } finally {
+        # Clean up
+        if (Test-Path $tempDir) {
+            Remove-Item $tempDir -Recurse -Force
+        }
+    }
+}
+
 function Install-LanguageMod {
     param([string]$LanguageName)
     
     # Check if this is the English option
     if ($LanguageName -eq "English (remove custom files)") {
         return Remove-CustomFiles
+    }
+    
+    # Check if this is a zip file option
+    if ($LanguageName -like "*(zip)") {
+        $zipName = $LanguageName -replace " \(zip\)", ""
+        $zipFile = "$zipName.zip"
+        
+        if (-not (Test-Path $zipFile)) {
+            Write-ColorOutput "Error: Zip file '$zipFile' not found!" $Red
+            return $false
+        }
+        
+        return Install-FromZip $zipFile
     }
     
     $saveGamePath = Get-SaveGamePath
@@ -228,6 +420,12 @@ function Install-LanguageMod {
         Write-Host "2. Run Word Play at least once to create the save directory"
         Write-Host "3. Check that the game has proper permissions"
         return $false
+    }
+    
+    # Check if this language uses a compressed dictionary
+    $dictZipFile = Join-Path $sourceDir "customdictionary.zip"
+    if (Test-Path $dictZipFile) {
+        return Install-FromCompressedDict $LanguageName
     }
     
     Write-Host "Source: $sourceDir"
