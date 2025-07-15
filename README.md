@@ -1,26 +1,59 @@
 # Word Play (by Game Maker's Toolkit) - Language Mods
 Language mods for the Word Play game by Game Maker's Toolkit
 
-## How to use
+## Quick Installation
 
-First, you'll need to find the folder with your save game in it. Here's where to get it:
+Use our automated installation scripts for easy setup:
 
 ### Mac
-Users/YourUserName/Library/Application Support/com.GMTK.WordPlay
+```bash
+chmod +x install_language.sh
+./install_language.sh <language_name>
 
-### PC
-YourUserName/AppData/LocalLow/Game Maker's Toolkit/Word Play
+# List available languages
+./install_language.sh --list
+
+# Show help
+./install_language.sh --help
+```
+
+### Windows
+```powershell
+.\install_language.ps1 <language_name>
+
+# List available languages
+.\install_language.ps1 --list
+
+# Show help
+.\install_language.ps1 --help
+```
+
+### Example
+```bash
+# Install Catalan language mod
+./install_language.sh catalan
+```
+
+## Manual Installation
+
+If you prefer to install manually, you'll need to find the folder with your save game in it:
+
+### Mac
+`~/Library/Application Support/com.GMTK.WordPlay`
+
+### Windows
+`%USERPROFILE%\AppData\LocalLow\Game Maker's Toolkit\Word Play`
 
 You may need to show hidden files or folders to get here!
 
-Then simply add the customdictionary.txt and customletterbag.txt of the desired language.
+Then simply add the `customdictionary.txt` and `customletterbag.txt` of the desired language.
 
 The game should show "Custom Dictionary" in the bottom left corner.
 
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/cc5920eb-3ab3-43f5-b79b-8efcab7e2079" />
 
 ## Contribute
-Simply make a Pull Request with a new folder with the language (or edit existing one) with both a customdictionary.txt and customletterbag.txt
+Simply make a Pull Request with a new folder with the language (or edit existing one) with both a `customdictionary.txt` and `customletterbag.txt`
 
 ## Steam Link
 https://store.steampowered.com/app/3586660/Word_Play/?curator_clanid=44902603
