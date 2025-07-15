@@ -5,7 +5,7 @@ Language mods for the Word Play game by Game Maker's Toolkit
 
 Use our automated installation scripts for easy setup:
 
-### Mac
+### Mac & Linux
 ```bash
 chmod +x install_language.sh
 ./install_language.sh <language_name>
@@ -43,6 +43,12 @@ If you prefer to install manually, you'll need to find the folder with your save
 
 ### Windows
 `%USERPROFILE%\AppData\LocalLow\Game Maker's Toolkit\Word Play`
+
+### Linux
+Linux runs Word Play through Proton, therefor it uses the Windows folder structure nested inside the `compatdata` folder. This folder is relative to the `steamapps` folder you installed the game in. The default location is:
+
+`~/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/`
+
 
 You may need to show hidden files or folders to get here!
 
