@@ -8,12 +8,69 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Function to get save game path
 get_save_game_path() {
     local home_dir="$HOME"
     echo "$home_dir/Library/Application Support/com.GMTK.WordPlay"
+}
+
+# Function to show interactive selection menu
+show_interactive_selection() {
+    echo -e "${BLUE}Word Play Language Mod Installer${NC}" >&2
+    echo -e "${CYAN}Select a language to install:${NC}" >&2
+    echo "" >&2
+    
+    # Build languages array directly
+    local languages=()
+    local count=0
+    
+    for dir in */; do
+        if [ -d "$dir" ]; then
+            lang_name="${dir%/}"
+            if [ -f "$dir/customdictionary.txt" ] && [ -f "$dir/customletterbag.txt" ]; then
+                languages+=("$lang_name")
+                ((count++))
+            fi
+        fi
+    done
+    
+    if [ $count -eq 0 ]; then
+        echo -e "${YELLOW}No complete language mods found.${NC}" >&2
+        echo "Each language directory should contain:" >&2
+        echo "  - customdictionary.txt" >&2
+        echo "  - customletterbag.txt" >&2
+        return 1
+    fi
+    
+    # Display numbered options
+    for i in "${!languages[@]}"; do
+        local num=$((i + 1))
+        echo -e "  ${GREEN}$num${NC}. ${languages[$i]}" >&2
+    done
+    
+    echo "" >&2
+    
+    # Get user selection
+    while true; do
+        echo -n -e "${CYAN}Enter the number of your choice (1-$count): ${NC}" >&2
+        read -r selection
+        
+        # Check if input is a number
+        if [[ "$selection" =~ ^[0-9]+$ ]]; then
+            local num=$((selection))
+            if [ $num -ge 1 ] && [ $num -le $count ]; then
+                echo "${languages[$((num - 1))]}"
+                return 0
+            else
+                echo -e "${RED}Please enter a number between 1 and $count.${NC}" >&2
+            fi
+        else
+            echo -e "${RED}Please enter a valid number.${NC}" >&2
+        fi
+    done
 }
 
 # Function to list available languages
@@ -47,7 +104,8 @@ show_help() {
     echo "Mac shell script - no dependencies required"
     echo ""
     echo "Usage:"
-    echo "  $0 <language_name>     Install a language mod"
+    echo "  $0                    Interactive language selection"
+    echo "  $0 <language_name>    Install a specific language mod"
     echo "  $0 --list             List available language mods"
     echo "  $0 --help             Show this help message"
     echo ""
@@ -126,8 +184,15 @@ install_language_mod() {
 
 # Main script logic
 if [ $# -eq 0 ]; then
-    show_help
-    exit 1
+    # Interactive mode - show interactive selection menu
+    selected_language=$(show_interactive_selection)
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+    
+    # Install the selected language
+    install_language_mod "$selected_language"
+    exit $?
 fi
 
 case "$1" in

@@ -2,6 +2,7 @@
 # Works on all Windows systems by default (PowerShell comes pre-installed)
 # Usage: .\install_language.ps1 <language_name>
 
+[CmdletBinding()]
 param(
     [Parameter(Position=0)]
     [string]$LanguageName,
@@ -15,6 +16,7 @@ $Red = "Red"
 $Green = "Green"
 $Yellow = "Yellow"
 $Blue = "Blue"
+$Cyan = "Cyan"
 
 function Write-ColorOutput {
     param(
@@ -29,7 +31,8 @@ function Show-Help {
     Write-Host "Windows PowerShell script - no dependencies required"
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  .\install_language.ps1 <language_name>     Install a language mod"
+    Write-Host "  .\install_language.ps1                    Interactive language selection"
+    Write-Host "  .\install_language.ps1 <language_name>    Install a specific language mod"
     Write-Host "  .\install_language.ps1 --list             List available language mods"
     Write-Host "  .\install_language.ps1 --help             Show this help message"
     Write-Host ""
@@ -43,8 +46,73 @@ function Show-Help {
 
 function Get-SaveGamePath {
     # Windows save game path
-    $userProfile = $env:USERPROFILE
-    return Join-Path $userProfile "AppData\LocalLow\Game Maker's Toolkit\Word Play"
+    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        $userProfile = $env:USERPROFILE
+        return Join-Path $userProfile "AppData\LocalLow\Game Maker's Toolkit\Word Play"
+    } else {
+        # Cross-platform fallback (for testing on macOS/Linux)
+        $userProfile = $env:HOME
+        return Join-Path $userProfile "Library/Application Support/com.GMTK.WordPlay"
+    }
+}
+
+function Get-AvailableLanguagesList {
+    $languages = @()
+    
+    Get-ChildItem -Directory | ForEach-Object {
+        $langName = $_.Name
+        $dictFile = Join-Path $_.FullName "customdictionary.txt"
+        $bagFile = Join-Path $_.FullName "customletterbag.txt"
+        
+        if ((Test-Path $dictFile) -and (Test-Path $bagFile)) {
+            $languages += $langName
+        }
+    }
+    
+    return $languages
+}
+
+function Show-InteractiveSelection {
+    Write-ColorOutput "Word Play Language Mod Installer" $Blue
+    Write-ColorOutput "Select a language to install:" $Cyan
+    Write-Host ""
+    
+    $languages = Get-AvailableLanguagesList
+    $count = $languages.Count
+    
+    if ($count -eq 0) {
+        Write-ColorOutput "No complete language mods found." $Yellow
+        Write-Host "Each language directory should contain:"
+        Write-Host "  - customdictionary.txt"
+        Write-Host "  - customletterbag.txt"
+        return $null
+    }
+    
+    # Display numbered options
+    for ($i = 0; $i -lt $count; $i++) {
+        $num = $i + 1
+        Write-ColorOutput "  $num. $($languages[$i])" $Green
+    }
+    
+    Write-Host ""
+    
+    # Get user selection
+    while ($true) {
+        Write-Host "Enter the number of your choice (1-$count): " -NoNewline -ForegroundColor $Cyan
+        $selection = Read-Host
+        
+        # Check if input is a number
+        if ($selection -match '^\d+$') {
+            $num = [int]$selection
+            if ($num -ge 1 -and $num -le $count) {
+                return $languages[$num - 1]
+            } else {
+                Write-ColorOutput "Please enter a number between 1 and $count." $Red
+            }
+        } else {
+            Write-ColorOutput "Please enter a valid number." $Red
+        }
+    }
 }
 
 function Get-AvailableLanguages {
@@ -56,7 +124,7 @@ function Get-AvailableLanguages {
         $dictFile = Join-Path $_.FullName "customdictionary.txt"
         $bagFile = Join-Path $_.FullName "customletterbag.txt"
         
-        if (Test-Path $dictFile -and Test-Path $bagFile) {
+        if ((Test-Path $dictFile) -and (Test-Path $bagFile)) {
             Write-ColorOutput "  ✓ $langName" $Green
             $foundLanguages = $true
         } else {
@@ -136,7 +204,7 @@ function Install-LanguageMod {
 }
 
 # Main script logic
-if ($Help -or $args.Count -eq 0) {
+if ($Help) {
     Show-Help
     exit 0
 }
@@ -146,11 +214,20 @@ if ($List) {
     exit 0
 }
 
-if ($LanguageName) {
+if ($LanguageName -and $LanguageName -ne "") {
     Install-LanguageMod $LanguageName
     exit $LASTEXITCODE
 }
 
-# If we get here, show help
-Show-Help
-exit 1 
+# Interactive mode - no arguments provided
+$selectedLanguage = Show-InteractiveSelection
+if ($selectedLanguage) {
+    $success = Install-LanguageMod $selectedLanguage
+    if ($success) {
+        exit 0
+    } else {
+        exit 1
+    }
+} else {
+    exit 1
+} 
