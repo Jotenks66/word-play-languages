@@ -58,6 +58,8 @@ function Get-SaveGamePath {
 
 function Get-AvailableLanguagesList {
     $languages = @()
+    # Add English as the first option
+    $languages += "English (remove custom files)"
     
     Get-ChildItem -Directory | ForEach-Object {
         $langName = $_.Name
@@ -80,18 +82,21 @@ function Show-InteractiveSelection {
     $languages = Get-AvailableLanguagesList
     $count = $languages.Count
     
-    if ($count -eq 0) {
-        Write-ColorOutput "No complete language mods found." $Yellow
+    if ($count -eq 1) {
+        Write-ColorOutput "No additional language mods found." $Yellow
         Write-Host "Each language directory should contain:"
         Write-Host "  - customdictionary.txt"
         Write-Host "  - customletterbag.txt"
-        return $null
     }
     
     # Display numbered options
     for ($i = 0; $i -lt $count; $i++) {
         $num = $i + 1
-        Write-ColorOutput "  $num. $($languages[$i])" $Green
+        if ($i -eq 0) {
+            Write-ColorOutput "  $num. $($languages[$i])" $Cyan
+        } else {
+            Write-ColorOutput "  $num. $($languages[$i])" $Green
+        }
     }
     
     Write-Host ""
@@ -119,6 +124,9 @@ function Get-AvailableLanguages {
     Write-ColorOutput "Available language mods:" $Blue
     $foundLanguages = $false
     
+    # Always show English option
+    Write-ColorOutput "  ✓ English (remove custom files)" $Cyan
+    
     Get-ChildItem -Directory | ForEach-Object {
         $langName = $_.Name
         $dictFile = Join-Path $_.FullName "customdictionary.txt"
@@ -133,15 +141,70 @@ function Get-AvailableLanguages {
     }
     
     if (-not $foundLanguages) {
-        Write-ColorOutput "No complete language mods found." $Yellow
+        Write-ColorOutput "No additional language mods found." $Yellow
         Write-Host "Each language directory should contain:"
         Write-Host "  - customdictionary.txt"
         Write-Host "  - customletterbag.txt"
     }
 }
 
+function Remove-CustomFiles {
+    $saveGamePath = Get-SaveGamePath
+    
+    # Check if save game directory exists
+    if (-not (Test-Path $saveGamePath -PathType Container)) {
+        Write-ColorOutput "Error: Word Play save game directory not found at:" $Red
+        Write-Host "  $saveGamePath"
+        Write-Host ""
+        Write-ColorOutput "Troubleshooting:" $Yellow
+        Write-Host "1. Make sure Word Play is installed"
+        Write-Host "2. Run Word Play at least once to create the save directory"
+        Write-Host "3. Check that the game has proper permissions"
+        return $false
+    }
+    
+    Write-ColorOutput "Removing custom language files..." $Blue
+    Write-Host "Location: $saveGamePath"
+    Write-Host ""
+    
+    $removedCount = 0
+    $requiredFiles = @("customdictionary.txt", "customletterbag.txt")
+    
+    foreach ($file in $requiredFiles) {
+        $filePath = Join-Path $saveGamePath $file
+        
+        if (Test-Path $filePath) {
+            try {
+                Remove-Item $filePath -Force
+                Write-ColorOutput "✓ Removed $file" $Green
+                $removedCount++
+            } catch {
+                Write-ColorOutput "✗ Failed to remove $file" $Red
+            }
+        } else {
+            Write-ColorOutput "⚠ No $file found to remove" $Yellow
+        }
+    }
+    
+    Write-Host ""
+    if ($removedCount -gt 0) {
+        Write-ColorOutput "Successfully restored default English language!" $Green
+        Write-Host "The game will now use the default English dictionary and letter bag."
+        return $true
+    } else {
+        Write-ColorOutput "No custom files were found to remove." $Yellow
+        Write-Host "The game is already using the default English language."
+        return $true
+    }
+}
+
 function Install-LanguageMod {
     param([string]$LanguageName)
+    
+    # Check if this is the English option
+    if ($LanguageName -eq "English (remove custom files)") {
+        return Remove-CustomFiles
+    }
     
     $saveGamePath = Get-SaveGamePath
     $sourceDir = Join-Path (Get-Location) $LanguageName

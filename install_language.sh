@@ -17,6 +17,23 @@ get_save_game_path() {
     echo "$home_dir/Library/Application Support/com.GMTK.WordPlay"
 }
 
+# Function to get available languages as an array
+get_available_languages() {
+    local languages=()
+    # Add English as the first option
+    languages+=("English (remove custom files)")
+    
+    for dir in */; do
+        if [ -d "$dir" ]; then
+            lang_name="${dir%/}"
+            if [ -f "$dir/customdictionary.txt" ] && [ -f "$dir/customletterbag.txt" ]; then
+                languages+=("$lang_name")
+            fi
+        fi
+    done
+    echo "${languages[@]}"
+}
+
 # Function to show interactive selection menu
 show_interactive_selection() {
     echo -e "${BLUE}Word Play Language Mod Installer${NC}" >&2
@@ -26,6 +43,10 @@ show_interactive_selection() {
     # Build languages array directly
     local languages=()
     local count=0
+    
+    # Add English as the first option
+    languages+=("English (remove custom files)")
+    ((count++))
     
     for dir in */; do
         if [ -d "$dir" ]; then
@@ -37,18 +58,21 @@ show_interactive_selection() {
         fi
     done
     
-    if [ $count -eq 0 ]; then
-        echo -e "${YELLOW}No complete language mods found.${NC}" >&2
+    if [ $count -eq 1 ]; then
+        echo -e "${YELLOW}No additional language mods found.${NC}" >&2
         echo "Each language directory should contain:" >&2
         echo "  - customdictionary.txt" >&2
         echo "  - customletterbag.txt" >&2
-        return 1
     fi
     
     # Display numbered options
     for i in "${!languages[@]}"; do
         local num=$((i + 1))
-        echo -e "  ${GREEN}$num${NC}. ${languages[$i]}" >&2
+        if [ $i -eq 0 ]; then
+            echo -e "  ${GREEN}$num${NC}. ${CYAN}${languages[$i]}${NC}" >&2
+        else
+            echo -e "  ${GREEN}$num${NC}. ${languages[$i]}" >&2
+        fi
     done
     
     echo "" >&2
@@ -78,6 +102,9 @@ list_available_languages() {
     echo -e "${BLUE}Available language mods:${NC}"
     local found_languages=false
     
+    # Always show English option
+    echo -e "  ${CYAN}✓${NC} English (remove custom files)"
+    
     for dir in */; do
         if [ -d "$dir" ]; then
             lang_name="${dir%/}"
@@ -91,10 +118,68 @@ list_available_languages() {
     done
     
     if [ "$found_languages" = false ]; then
-        echo -e "${YELLOW}No complete language mods found.${NC}"
+        echo -e "${YELLOW}No additional language mods found.${NC}"
         echo "Each language directory should contain:"
         echo "  - customdictionary.txt"
         echo "  - customletterbag.txt"
+    fi
+}
+
+# Function to remove custom files (English option)
+remove_custom_files() {
+    local save_game_path=$(get_save_game_path)
+    
+    # Check if save game directory exists
+    if [ ! -d "$save_game_path" ]; then
+        echo -e "${RED}Error: Word Play save game directory not found at:${NC}"
+        echo "  $save_game_path"
+        echo ""
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "1. Make sure Word Play is installed"
+        echo "2. Run Word Play at least once to create the save directory"
+        echo "3. Check that the game has proper permissions"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Removing custom language files...${NC}"
+    echo "Location: $save_game_path"
+    echo ""
+    
+    local removed_count=0
+    
+    # Remove custom dictionary if it exists
+    if [ -f "$save_game_path/customdictionary.txt" ]; then
+        if rm "$save_game_path/customdictionary.txt"; then
+            echo -e "${GREEN}✓${NC} Removed customdictionary.txt"
+            ((removed_count++))
+        else
+            echo -e "${RED}✗${NC} Failed to remove customdictionary.txt"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} No customdictionary.txt found to remove"
+    fi
+    
+    # Remove custom letter bag if it exists
+    if [ -f "$save_game_path/customletterbag.txt" ]; then
+        if rm "$save_game_path/customletterbag.txt"; then
+            echo -e "${GREEN}✓${NC} Removed customletterbag.txt"
+            ((removed_count++))
+        else
+            echo -e "${RED}✗${NC} Failed to remove customletterbag.txt"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} No customletterbag.txt found to remove"
+    fi
+    
+    echo ""
+    if [ $removed_count -gt 0 ]; then
+        echo -e "${GREEN}Successfully restored default English language!${NC}"
+        echo "The game will now use the default English dictionary and letter bag."
+        return 0
+    else
+        echo -e "${YELLOW}No custom files were found to remove.${NC}"
+        echo "The game is already using the default English language."
+        return 0
     fi
 }
 
@@ -121,6 +206,12 @@ show_help() {
 install_language_mod() {
     local language_name="$1"
     local save_game_path=$(get_save_game_path)
+    
+    # Check if this is the English option
+    if [ "$language_name" = "English (remove custom files)" ]; then
+        remove_custom_files
+        return $?
+    fi
     
     # Check if language directory exists
     if [ ! -d "$language_name" ]; then
