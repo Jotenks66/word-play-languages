@@ -49,6 +49,9 @@ Linux runs Word Play through Proton, therefor it uses the Windows folder structu
 
 `~/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/`
 
+For Flatpak, the location is different:
+
+`~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/`
 
 You may need to show hidden files or folders to get here!
 
