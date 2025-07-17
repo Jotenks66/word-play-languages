@@ -17,7 +17,10 @@ get_save_game_path() {
     local macOS_dir="$home_dir/Library/Application Support/com.GMTK.WordPlay"
     case $OSTYPE in
         darwin*) echo $macOS_dir;;
-        linux*) echo "$home_dir/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/";;
+        linux*)
+            local steam_path="$home_dir/.local/share/Steam"
+            echo "$steam_path/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/"
+            ;;
         *)
             echo -e "${RED}Unknown OS:${NC} falling back to macOS" >&2
             echo $macOS_dir
