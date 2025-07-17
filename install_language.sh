@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Word Play Language Mod Installer - Mac Script
 # Works on Mac
@@ -14,7 +14,15 @@ NC='\033[0m' # No Color
 # Function to get save game path
 get_save_game_path() {
     local home_dir="$HOME"
-    echo "$home_dir/Library/Application Support/com.GMTK.WordPlay"
+    local macOS_dir="$home_dir/Library/Application Support/com.GMTK.WordPlay"
+    case $OSTYPE in
+        darwin*) echo $macOS_dir;;
+        linux*) echo "$home_dir/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/";;
+        *)
+            echo -e "${RED}Unkown OS:${NC} falling back to macOS" >&2
+            echo $macOS_dir
+        ;;
+    esac
 }
 
 # Function to get available languages as an array
@@ -164,19 +172,27 @@ list_available_languages() {
     fi
 }
 
-# Function to remove custom files (English option)
-remove_custom_files() {
-    local save_game_path=$(get_save_game_path)
-    
-    # Check if save game directory exists
-    if [ ! -d "$save_game_path" ]; then
+verify_save_game_path_exists() {
+    if [ ! -d "$1" ]; then
         echo -e "${RED}Error: Word Play save game directory not found at:${NC}"
-        echo "  $save_game_path"
+        echo "  $1"
         echo ""
         echo -e "${YELLOW}Troubleshooting:${NC}"
         echo "1. Make sure Word Play is installed"
         echo "2. Run Word Play at least once to create the save directory"
         echo "3. Check that the game has proper permissions"
+        [[ "$OSTYPE" == linux* ]] && echo '4. Check if the game was installed in the default steam library, i.e. `~/.local/share/Steam/steamapps/` this is the only supported configuration currently'
+            
+        return 1
+    fi
+}
+
+# Function to remove custom files (English option)
+remove_custom_files() {
+    local save_game_path=$(get_save_game_path)
+    
+    # Check if save game directory exists
+    if ! verify_save_game_path_exists "$save_game_path"; then
         return 1
     fi
     
@@ -392,7 +408,7 @@ show_help() {
     echo "  $0 catalan"
     echo ""
     echo "Requirements:"
-    echo "  - Bash shell (comes pre-installed on Mac)"
+    echo "  - Bash shell & unzip (comes pre-installed on Mac)"
     echo "  - Word Play game installed and run at least once"
 }
 
@@ -429,14 +445,7 @@ install_language_mod() {
     fi
     
     # Check if save game directory exists
-    if [ ! -d "$save_game_path" ]; then
-        echo -e "${RED}Error: Word Play save game directory not found at:${NC}"
-        echo "  $save_game_path"
-        echo ""
-        echo -e "${YELLOW}Troubleshooting:${NC}"
-        echo "1. Make sure Word Play is installed"
-        echo "2. Run Word Play at least once to create the save directory"
-        echo "3. Check that the game has proper permissions"
+    if ! verify_save_game_path_exists "$save_game_path"; then
         return 1
     fi
     
