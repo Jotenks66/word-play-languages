@@ -17,9 +17,25 @@ get_save_game_path() {
     local macOS_dir="$home_dir/Library/Application Support/com.GMTK.WordPlay"
     case $OSTYPE in
         darwin*) echo $macOS_dir;;
-        linux*) echo "$home_dir/.local/share/Steam/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/";;
+        linux*)
+            local steam_path_default="$home_dir/.local/share/Steam"
+            local steam_path_flatpak="$home_dir/.var/app/com.valvesoftware.Steam/.local/share/Steam"
+            local steam_path=
+            if [ -d "$steam_path_default" ]; then
+                steam_path="$steam_path_default"
+                echo -e "Assuming ${GREEN}default${NC} Steam directory '$steam_path'." >&2
+            elif [ -d "$steam_path_flatpak" ]; then
+                steam_path="$steam_path_flatpak"
+                echo -e "Assuming ${GREEN}Flatpak${NC} installation of Steam at '$steam_path'." >&2
+            fi
+            if [ -z "$steam_path" ]; then
+                echo -e "${RED}Error${NC}: cannot find path to Steam dir." >&2
+                steam_path="$steam_path_default"
+            fi
+            echo "$steam_path/steamapps/compatdata/3586660/pfx/drive_c/users/steamuser/AppData/LocalLow/Game Maker's Toolkit/Word Play/"
+            ;;
         *)
-            echo -e "${RED}Unkown OS:${NC} falling back to macOS" >&2
+            echo -e "${RED}Unknown OS:${NC} falling back to macOS" >&2
             echo $macOS_dir
         ;;
     esac
@@ -181,7 +197,7 @@ verify_save_game_path_exists() {
         echo "1. Make sure Word Play is installed"
         echo "2. Run Word Play at least once to create the save directory"
         echo "3. Check that the game has proper permissions"
-        [[ "$OSTYPE" == linux* ]] && echo '4. Check if the game was installed in the default steam library, i.e. `~/.local/share/Steam/steamapps/` this is the only supported configuration currently'
+        [[ "$OSTYPE" == linux* ]] && echo '4. Check where the game was installed. The default steam library is `~/.local/share/Steam/steamapps/`. For Flatpak, it is `~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/`. These two are the only supported configurations.'
             
         return 1
     fi
