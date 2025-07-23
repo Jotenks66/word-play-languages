@@ -1,4 +1,4 @@
-The wordlist for the Dutch custom dictionary is provided by Stichting Opentaal's github repo (https://github.com/OpenTaal/opentaal-wordlist) licensed under the Revised BSD License and/or CC BY 3.0 licences.
+The basis of the wordlist for the Dutch customdictionary.txt is provided by Stichting Opentaal's github repo (https://github.com/OpenTaal/opentaal-wordlist) licensed under the Revised BSD License and/or CC BY 3.0 licences.
 
 This is the entire license text as provided by them:
 
